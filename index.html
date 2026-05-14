@@ -296,33 +296,45 @@
     });
 
     async function handleCheck() {
-      const reg = cleanReg(regInput.value);
+  const reg = cleanReg(regInput.value);
 
-      if (!reg) {
-        alert("Enter a registration first.");
-        return;
-      }
+  if (!reg) {
+    alert("Enter a registration first.");
+    return;
+  }
 
-      setLoading(true);
-      results.classList.add("hidden");
+  const API_BASE = "https://mot-quote-assist-api.onrender.com";
 
-      try {
-        const response = await fetch(`/api/mot/${encodeURIComponent(reg)}`);
-        const data = await response.json();
+  setLoading(true);
+  results.classList.add("hidden");
 
-        if (!response.ok) {
-          throw new Error(data.error || "Lookup failed.");
-        }
+  try {
+    const response = await fetch(`${API_BASE}/api/mot/${encodeURIComponent(reg)}`);
 
-        renderVehicle(data);
-        statusBox.classList.add("hidden");
-      } catch (error) {
-        statusBox.innerHTML = `<div class="error">${escapeHtml(error.message)}</div>`;
-        statusBox.classList.remove("hidden");
-      } finally {
-        setLoading(false);
-      }
+    const rawText = await response.text();
+
+    let data;
+    try {
+      data = JSON.parse(rawText);
+    } catch {
+      throw new Error(
+        "The backend returned HTML instead of JSON. Check the Render backend URL and make sure /api/health works."
+      );
     }
+
+    if (!response.ok) {
+      throw new Error(data.error || "Lookup failed.");
+    }
+
+    renderVehicle(data);
+    statusBox.classList.add("hidden");
+  } catch (error) {
+    statusBox.innerHTML = `<div class="error">${escapeHtml(error.message)}</div>`;
+    statusBox.classList.remove("hidden");
+  } finally {
+    setLoading(false);
+  }
+}
 
     function setLoading(isLoading) {
       checkBtn.disabled = isLoading;
