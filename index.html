@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MOT Quote Assist</title>
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      background: #f4f7f9;
+      color: #102030;
+    }
+
+    .app {
+      max-width: 520px;
+      margin: 0 auto;
+      min-height: 100vh;
+      padding: 24px 16px 40px;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: #dff4f7;
+      color: #0b6070;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 32px;
+      line-height: 1.05;
+      letter-spacing: -0.04em;
+    }
+
+    .subtitle {
+      margin-top: 10px;
+      color: #5e6c78;
+      font-size: 15px;
+      line-height: 1.5;
+    }
+
+    .card {
+      background: #ffffff;
+      border: 1px solid #dde6ec;
+      border-radius: 22px;
+      padding: 18px;
+      box-shadow: 0 12px 35px rgba(16, 32, 48, 0.08);
+      margin-bottom: 16px;
+    }
+
+    label {
+      display: block;
+      font-size: 13px;
+      font-weight: 700;
+      margin-bottom: 8px;
+      color: #344654;
+    }
+
+    .reg-row {
+      display: flex;
+      gap: 10px;
+    }
+
+    input {
+      flex: 1;
+      border: 2px solid #d6e1e8;
+      border-radius: 16px;
+      padding: 16px;
+      font-size: 24px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      outline: none;
+      background: #fbfdfe;
+      min-width: 0;
+    }
+
+    input:focus {
+      border-color: #36a9b8;
+      box-shadow: 0 0 0 4px rgba(54, 169, 184, 0.13);
+    }
+
+    button {
+      border: 0;
+      border-radius: 16px;
+      padding: 14px 16px;
+      font-size: 15px;
+      font-weight: 800;
+      cursor: pointer;
+      background: #102030;
+      color: #ffffff;
+    }
+
+    button.secondary {
+      width: 100%;
+      background: #e9f2f5;
+      color: #102030;
+      margin-top: 12px;
+    }
+
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .hint {
+      font-size: 12px;
+      color: #72808c;
+      margin-top: 10px;
+    }
+
+    .hidden { display: none; }
+
+    .vehicle-title {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: flex-start;
+      margin-bottom: 14px;
+    }
+
+    .vehicle-title h2 {
+      margin: 0;
+      font-size: 22px;
+      letter-spacing: -0.03em;
+    }
+
+    .result-pill {
+      flex: 0 0 auto;
+      border-radius: 999px;
+      padding: 8px 10px;
+      font-size: 12px;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .failed {
+      background: #ffe4e4;
+      color: #9c1111;
+    }
+
+    .passed {
+      background: #e1f7ea;
+      color: #106b35;
+    }
+
+    .unknown {
+      background: #e9eef2;
+      color: #344654;
+    }
+
+    .meta-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .meta {
+      background: #f5f8fa;
+      border-radius: 16px;
+      padding: 12px;
+    }
+
+    .meta span {
+      display: block;
+      color: #70808d;
+      font-size: 12px;
+      margin-bottom: 4px;
+    }
+
+    .meta strong { font-size: 15px; }
+
+    .section-title {
+      font-size: 15px;
+      font-weight: 900;
+      margin: 18px 0 10px;
+    }
+
+    .issue-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: grid;
+      gap: 8px;
+    }
+
+    .issue {
+      padding: 12px;
+      border-radius: 14px;
+      background: #fff6f2;
+      border: 1px solid #ffd8c8;
+      font-size: 14px;
+      line-height: 1.35;
+    }
+
+    .advisory {
+      background: #fffbea;
+      border-color: #f4df90;
+    }
+
+    .parts-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .part-chip {
+      padding: 12px;
+      border-radius: 14px;
+      background: #eaf7f8;
+      color: #0b6070;
+      font-weight: 850;
+      font-size: 13px;
+      text-align: center;
+    }
+
+    .empty, .error {
+      color: #6e7d88;
+      font-size: 14px;
+      background: #f5f8fa;
+      padding: 12px;
+      border-radius: 14px;
+    }
+
+    .error {
+      background: #ffe4e4;
+      color: #9c1111;
+      border: 1px solid #ffc6c6;
+    }
+
+    .footer-note {
+      color: #72808c;
+      font-size: 12px;
+      line-height: 1.45;
+      margin-top: 18px;
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <section class="header">
+      <div class="badge">BDM field tool</div>
+      <h1>MOT Quote Assist</h1>
+      <p class="subtitle">Enter a UK registration to check MOT failures and turn them into quick parts quote prompts.</p>
+    </section>
+
+    <section class="card">
+      <label for="regInput">Vehicle registration</label>
+      <div class="reg-row">
+        <input id="regInput" type="text" placeholder="AB12 CDE" maxlength="10" />
+        <button id="checkBtn">Check</button>
+      </div>
+      <div class="hint">Live DVSA mode. Your API key is kept in the backend, not this page.</div>
+    </section>
+
+    <section id="status" class="card hidden"></section>
+    <section id="results" class="card hidden"></section>
+  </main>
+
+  <script>
+    const partRules = [
+      { keywords: ["brake pad", "pad worn"], part: "Brake pads" },
+      { keywords: ["brake disc", "disc worn"], part: "Brake discs" },
+      { keywords: ["tyre", "tread"], part: "Tyre" },
+      { keywords: ["coil spring", "spring fractured", "spring broken"], part: "Coil spring" },
+      { keywords: ["shock absorber", "misting of oil", "damper"], part: "Shock absorber" },
+      { keywords: ["wiper", "windscreen wiper"], part: "Wiper blades" },
+      { keywords: ["lamp", "bulb", "headlamp", "indicator"], part: "Bulb / lighting" },
+      { keywords: ["exhaust", "silencer", "emissions"], part: "Exhaust component" },
+      { keywords: ["suspension arm", "wishbone", "ball joint"], part: "Suspension arm / ball joint" },
+      { keywords: ["anti-roll", "anti roll", "drop link"], part: "Anti-roll bar link" },
+      { keywords: ["track rod", "steering joint"], part: "Steering / track rod" },
+      { keywords: ["wheel bearing"], part: "Wheel bearing" },
+      { keywords: ["number plate", "registration plate"], part: "Number plate" },
+      { keywords: ["mirror"], part: "Mirror / glass" }
+    ];
+
+    const regInput = document.getElementById("regInput");
+    const checkBtn = document.getElementById("checkBtn");
+    const statusBox = document.getElementById("status");
+    const results = document.getElementById("results");
+
+    checkBtn.addEventListener("click", handleCheck);
+    regInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") handleCheck();
+    });
+
+    async function handleCheck() {
+      const reg = cleanReg(regInput.value);
+
+      if (!reg) {
+        alert("Enter a registration first.");
+        return;
+      }
+
+      setLoading(true);
+      results.classList.add("hidden");
+
+      try {
+        const response = await fetch(`/api/mot/${encodeURIComponent(reg)}`);
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || "Lookup failed.");
+        }
+
+        renderVehicle(data);
+        statusBox.classList.add("hidden");
+      } catch (error) {
+        statusBox.innerHTML = `<div class="error">${escapeHtml(error.message)}</div>`;
+        statusBox.classList.remove("hidden");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    function setLoading(isLoading) {
+      checkBtn.disabled = isLoading;
+      checkBtn.textContent = isLoading ? "Checking..." : "Check";
+
+      if (isLoading) {
+        statusBox.innerHTML = `<div class="empty">Checking DVSA MOT history...</div>`;
+        statusBox.classList.remove("hidden");
+      }
+    }
+
+    function cleanReg(value) {
+      return value.trim().toUpperCase().replace(/\s+/g, "");
+    }
+
+    function findParts(failures, advisories) {
+      const textItems = [...failures, ...advisories].map(item => String(item).toLowerCase());
+      const parts = new Set();
+
+      textItems.forEach(text => {
+        partRules.forEach(rule => {
+          const matched = rule.keywords.some(keyword => text.includes(keyword));
+          if (matched) parts.add(rule.part);
+        });
+      });
+
+      return Array.from(parts);
+    }
+
+    function renderVehicle(vehicle) {
+      const failures = vehicle.mot.failures || [];
+      const advisories = vehicle.mot.advisories || [];
+      const parts = findParts(failures, advisories);
+      const result = String(vehicle.mot.result || "Unknown").toLowerCase();
+
+      const isFailed = result.includes("fail");
+      const isPassed = result.includes("pass");
+
+      const pillClass = isFailed ? "failed" : isPassed ? "passed" : "unknown";
+      const copyText = buildCopyText(vehicle, parts);
+
+      results.innerHTML = `
+        <div class="vehicle-title">
+          <div>
+            <h2>${escapeHtml(vehicle.make)} ${escapeHtml(vehicle.model || "")}</h2>
+            <div class="hint">
+              ${escapeHtml(vehicle.registration)} • ${escapeHtml(vehicle.fuelType)} • ${escapeHtml(vehicle.engineSize)} • ${escapeHtml(vehicle.colour)}
+            </div>
+          </div>
+          <div class="result-pill ${pillClass}">${escapeHtml(vehicle.mot.result)}</div>
+        </div>
+
+        <div class="meta-grid">
+          <div class="meta"><span>Last MOT</span><strong>${escapeHtml(vehicle.mot.date)}</strong></div>
+          <div class="meta"><span>Expiry / Due</span><strong>${escapeHtml(vehicle.mot.expiry)}</strong></div>
+          <div class="meta"><span>Mileage</span><strong>${escapeHtml(vehicle.mot.mileage)}</strong></div>
+          <div class="meta"><span>Quote prompts</span><strong>${parts.length}</strong></div>
+        </div>
+
+        <div class="section-title">Failures</div>
+        ${renderIssueList(failures, "issue", "No failures found on the latest MOT.")}
+
+        <div class="section-title">Advisories</div>
+        ${renderIssueList(advisories, "issue advisory", "No advisories found on the latest MOT.")}
+
+        <div class="section-title">Parts opportunity</div>
+        ${renderParts(parts)}
+
+        <button class="secondary" onclick='copySummary(${JSON.stringify(copyText)})'>Copy BDM summary</button>
+
+        <p class="footer-note">This is a quoting aid only. Always verify exact fitment in PartsLink24 or TPS systems before quoting.</p>
+      `;
+
+      results.classList.remove("hidden");
+    }
+
+    function renderIssueList(items, className, emptyText) {
+      if (!items.length) return `<div class="empty">${emptyText}</div>`;
+
+      return `
+        <ul class="issue-list">
+          ${items.map(item => `<li class="${className}">${escapeHtml(item)}</li>`).join("")}
+        </ul>
+      `;
+    }
+
+    function renderParts(parts) {
+      if (!parts.length) return `<div class="empty">No obvious parts opportunity detected.</div>`;
+
+      return `
+        <div class="parts-grid">
+          ${parts.map(part => `<div class="part-chip">${escapeHtml(part)}</div>`).join("")}
+        </div>
+      `;
+    }
+
+    function buildCopyText(vehicle, parts) {
+      return `MOT Quote Assist\n\nReg: ${vehicle.registration}\nVehicle: ${vehicle.make} ${vehicle.model || ""}\nLast MOT: ${vehicle.mot.date}\nResult: ${vehicle.mot.result}\nMileage: ${vehicle.mot.mileage}\n\nFailures:\n${vehicle.mot.failures.map(item => `- ${item}`).join("\n") || "None"}\n\nAdvisories:\n${vehicle.mot.advisories.map(item => `- ${item}`).join("\n") || "None"}\n\nParts opportunity:\n${parts.map(item => `- ${item}`).join("\n") || "None detected"}`;
+    }
+
+    async function copySummary(text) {
+      try {
+        await navigator.clipboard.writeText(text);
+        alert("BDM summary copied.");
+      } catch (error) {
+        alert("Could not copy summary. Your browser may block clipboard access.");
+      }
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+  </script>
+</body>
+</html>
