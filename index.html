@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>MOT Quote Assist</title>
+  <title>TPS Parts Intelligence Hub</title>
   <style>
     * { box-sizing: border-box; }
 
@@ -15,7 +15,7 @@
     }
 
     .app {
-      max-width: 520px;
+      max-width: 620px;
       margin: 0 auto;
       min-height: 100vh;
       padding: 24px 16px 40px;
@@ -48,6 +48,29 @@
       line-height: 1.5;
     }
 
+    .tabs {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin: 20px 0 16px;
+    }
+
+    .tab {
+      border: 1px solid #d8e4ea;
+      background: #ffffff;
+      color: #102030;
+      border-radius: 16px;
+      padding: 13px;
+      font-weight: 900;
+      cursor: pointer;
+    }
+
+    .tab.active {
+      background: #102030;
+      color: #ffffff;
+      border-color: #102030;
+    }
+
     .card {
       background: #ffffff;
       border: 1px solid #dde6ec;
@@ -65,7 +88,7 @@
       color: #344654;
     }
 
-    .reg-row {
+    .input-row {
       display: flex;
       gap: 10px;
     }
@@ -75,10 +98,10 @@
       border: 2px solid #d6e1e8;
       border-radius: 16px;
       padding: 16px;
-      font-size: 24px;
+      font-size: 22px;
       font-weight: 800;
       text-transform: uppercase;
-      letter-spacing: 0.08em;
+      letter-spacing: 0.06em;
       outline: none;
       background: #fbfdfe;
       min-width: 0;
@@ -89,7 +112,7 @@
       box-shadow: 0 0 0 4px rgba(54, 169, 184, 0.13);
     }
 
-    button {
+    button, .supplier-link {
       border: 0;
       border-radius: 16px;
       padding: 14px 16px;
@@ -98,6 +121,9 @@
       cursor: pointer;
       background: #102030;
       color: #ffffff;
+      text-decoration: none;
+      text-align: center;
+      display: inline-block;
     }
 
     button.secondary {
@@ -116,6 +142,7 @@
       font-size: 12px;
       color: #72808c;
       margin-top: 10px;
+      line-height: 1.45;
     }
 
     .hidden { display: none; }
@@ -208,7 +235,7 @@
       border-color: #f4df90;
     }
 
-    .parts-grid {
+    .parts-grid, .supplier-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 8px;
@@ -222,6 +249,19 @@
       font-weight: 850;
       font-size: 13px;
       text-align: center;
+    }
+
+    .supplier-link {
+      background: #eaf7f8;
+      color: #0b6070;
+      border: 1px solid #ccebf0;
+      font-size: 13px;
+    }
+
+    .supplier-link.primary {
+      background: #102030;
+      color: #ffffff;
+      border-color: #102030;
     }
 
     .empty, .error {
@@ -244,30 +284,69 @@
       line-height: 1.45;
       margin-top: 18px;
     }
+
+    .tool-screen { display: none; }
+    .tool-screen.active { display: block; }
+
+    @media (max-width: 420px) {
+      .input-row {
+        flex-direction: column;
+      }
+
+      .parts-grid, .supplier-grid {
+        grid-template-columns: 1fr;
+      }
+
+      button {
+        width: 100%;
+      }
+    }
   </style>
 </head>
 <body>
   <main class="app">
     <section class="header">
-      <div class="badge">BDM field tool</div>
-      <h1>MOT Quote Assist</h1>
-      <p class="subtitle">Enter a UK registration to check MOT failures and turn them into quick parts quote prompts.</p>
+      <div class="badge">TPS field tool</div>
+      <h1>TPS Parts Intelligence Hub</h1>
+      <p class="subtitle">MOT quote prompts and aftermarket supplier search tools for BDM field conversations.</p>
     </section>
 
-    <section class="card">
-      <label for="regInput">Vehicle registration</label>
-      <div class="reg-row">
-        <input id="regInput" type="text" placeholder="AB12 CDE" maxlength="10" />
-        <button id="checkBtn">Check</button>
-      </div>
-      <div class="hint">Live DVSA mode. Your API key is kept in the backend, not this page.</div>
+    <nav class="tabs">
+      <button class="tab active" id="motTab">MOT Checker</button>
+      <button class="tab" id="xrefTab">Parts X-Ref</button>
+    </nav>
+
+    <section id="motScreen" class="tool-screen active">
+      <section class="card">
+        <label for="regInput">Vehicle registration</label>
+        <div class="input-row">
+          <input id="regInput" type="text" placeholder="AB12 CDE" maxlength="10" />
+          <button id="checkBtn">Check</button>
+        </div>
+        <div class="hint">Live DVSA mode. First lookup may be slower if Render has been asleep.</div>
+      </section>
+
+      <section id="status" class="card hidden"></section>
+      <section id="results" class="card hidden"></section>
     </section>
 
-    <section id="status" class="card hidden"></section>
-    <section id="results" class="card hidden"></section>
+    <section id="xrefScreen" class="tool-screen">
+      <section class="card">
+        <label for="partInput">VW Group part number</label>
+        <div class="input-row">
+          <input id="partInput" type="text" placeholder="5Q0411315K" />
+          <button id="partSearchBtn">Search</button>
+        </div>
+        <div class="hint">This does not guarantee fitment. Supplier catalogues remain the source of truth.</div>
+      </section>
+
+      <section id="xrefResults" class="card hidden"></section>
+    </section>
   </main>
 
   <script>
+    const API_BASE = "https://mot-quote-assist-api.onrender.com";
+
     const partRules = [
       { keywords: ["brake pad", "pad worn"], part: "Brake pads" },
       { keywords: ["brake disc", "disc worn"], part: "Brake discs" },
@@ -285,56 +364,171 @@
       { keywords: ["mirror"], part: "Mirror / glass" }
     ];
 
+    const suppliers = [
+      {
+        name: "Bosch",
+        url: "https://www.boschaftermarket.com/gb/en/parts/product-search.html",
+        note: "Use product search. Bosch supports OE/competitor number searching."
+      },
+      {
+        name: "MAHLE",
+        url: "https://www.mahle-aftermarket.com/eu/en/catalog/",
+        note: "Open MAHLE online catalogue and search the OE number."
+      },
+      {
+        name: "SKF",
+        url: "https://automotive.skf.com/eur/en/product-catalogue",
+        note: "Use product catalogue search."
+      },
+      {
+        name: "ZF / TRW / Sachs / Lemförder",
+        url: "https://aftermarket.zf.com/en/catalog",
+        note: "Use ZF online catalogue product search."
+      },
+      {
+        name: "Valeo",
+        url: "https://www.valeoservice.com/en-com/catalogue",
+        note: "Open Valeo catalogue and search the OE number."
+      },
+      {
+        name: "NGK / NTK",
+        url: "https://www.ngkpartfinder.co.uk/",
+        note: "Use NGK part finder."
+      },
+      {
+        name: "Hella",
+        url: "https://www.hella.com/techworld/uk/Technical/Parts-catalogue/",
+        note: "Open Hella catalogue and search the OE number."
+      }
+    ];
+
+    const motTab = document.getElementById("motTab");
+    const xrefTab = document.getElementById("xrefTab");
+    const motScreen = document.getElementById("motScreen");
+    const xrefScreen = document.getElementById("xrefScreen");
+
     const regInput = document.getElementById("regInput");
     const checkBtn = document.getElementById("checkBtn");
     const statusBox = document.getElementById("status");
     const results = document.getElementById("results");
+
+    const partInput = document.getElementById("partInput");
+    const partSearchBtn = document.getElementById("partSearchBtn");
+    const xrefResults = document.getElementById("xrefResults");
+
+    motTab.addEventListener("click", () => switchTab("mot"));
+    xrefTab.addEventListener("click", () => switchTab("xref"));
 
     checkBtn.addEventListener("click", handleCheck);
     regInput.addEventListener("keydown", (event) => {
       if (event.key === "Enter") handleCheck();
     });
 
+    partSearchBtn.addEventListener("click", handlePartSearch);
+    partInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") handlePartSearch();
+    });
+
+    function switchTab(tabName) {
+      const isMot = tabName === "mot";
+
+      motTab.classList.toggle("active", isMot);
+      xrefTab.classList.toggle("active", !isMot);
+
+      motScreen.classList.toggle("active", isMot);
+      xrefScreen.classList.toggle("active", !isMot);
+    }
+
     async function handleCheck() {
-  const reg = cleanReg(regInput.value);
+      const reg = cleanReg(regInput.value);
 
-  if (!reg) {
-    alert("Enter a registration first.");
-    return;
-  }
+      if (!reg) {
+        alert("Enter a registration first.");
+        return;
+      }
 
-  const API_BASE = "https://mot-quote-assist-api.onrender.com";
+      setLoading(true);
+      results.classList.add("hidden");
 
-  setLoading(true);
-  results.classList.add("hidden");
+      try {
+        const response = await fetch(`${API_BASE}/api/mot/${encodeURIComponent(reg)}`);
+        const rawText = await response.text();
 
-  try {
-    const response = await fetch(`${API_BASE}/api/mot/${encodeURIComponent(reg)}`);
+        let data;
+        try {
+          data = JSON.parse(rawText);
+        } catch {
+          throw new Error("The backend returned HTML instead of JSON. Check the Render backend URL and /api/health.");
+        }
 
-    const rawText = await response.text();
+        if (!response.ok) {
+          throw new Error(data.error || "Lookup failed.");
+        }
 
-    let data;
-    try {
-      data = JSON.parse(rawText);
-    } catch {
-      throw new Error(
-        "The backend returned HTML instead of JSON. Check the Render backend URL and make sure /api/health works."
-      );
+        renderVehicle(data);
+        statusBox.classList.add("hidden");
+      } catch (error) {
+        statusBox.innerHTML = `<div class="error">${escapeHtml(error.message)}</div>`;
+        statusBox.classList.remove("hidden");
+      } finally {
+        setLoading(false);
+      }
     }
 
-    if (!response.ok) {
-      throw new Error(data.error || "Lookup failed.");
+    function handlePartSearch() {
+      const partNumber = cleanPartNumber(partInput.value);
+
+      if (!partNumber) {
+        alert("Enter a VW Group part number first.");
+        return;
+      }
+
+      renderSupplierLauncher(partNumber);
     }
 
-    renderVehicle(data);
-    statusBox.classList.add("hidden");
-  } catch (error) {
-    statusBox.innerHTML = `<div class="error">${escapeHtml(error.message)}</div>`;
-    statusBox.classList.remove("hidden");
-  } finally {
-    setLoading(false);
-  }
-}
+    function renderSupplierLauncher(partNumber) {
+      const encodedPart = encodeURIComponent(partNumber);
+      const googleSearchUrl = `https://www.google.com/search?q=${encodedPart}+aftermarket+cross+reference`;
+
+      xrefResults.innerHTML = `
+        <div class="vehicle-title">
+          <div>
+            <h2>Aftermarket X-Ref</h2>
+            <div class="hint">VW Group part number: <strong>${escapeHtml(partNumber)}</strong></div>
+          </div>
+          <div class="result-pill unknown">Search</div>
+        </div>
+
+        <div class="section-title">Supplier catalogue launchers</div>
+
+        <div class="supplier-grid">
+          <a class="supplier-link primary" href="${googleSearchUrl}" target="_blank" rel="noopener noreferrer">Google X-Ref Search</a>
+          ${suppliers.map((supplier) => `
+            <a class="supplier-link" href="${supplier.url}" target="_blank" rel="noopener noreferrer">
+              ${escapeHtml(supplier.name)}
+            </a>
+          `).join("")}
+        </div>
+
+        <div class="section-title">How to use</div>
+        <div class="empty">
+          Open a supplier catalogue, paste <strong>${escapeHtml(partNumber)}</strong> into their product/OE search, then verify the result directly with the supplier catalogue.
+        </div>
+
+        <div class="section-title">Supplier notes</div>
+        <ul class="issue-list">
+          ${suppliers.map((supplier) => `
+            <li class="issue advisory"><strong>${escapeHtml(supplier.name)}:</strong> ${escapeHtml(supplier.note)}</li>
+          `).join("")}
+        </ul>
+
+        <button class="secondary" onclick='copyPartSearchSummary(${JSON.stringify(partNumber)})'>Copy search summary</button>
+
+        <p class="footer-note">This is a search launcher only. It does not confirm fitment, stock, price or availability.</p>
+      `;
+
+      xrefResults.classList.remove("hidden");
+    }
 
     function setLoading(isLoading) {
       checkBtn.disabled = isLoading;
@@ -347,6 +541,10 @@
     }
 
     function cleanReg(value) {
+      return value.trim().toUpperCase().replace(/\s+/g, "");
+    }
+
+    function cleanPartNumber(value) {
       return value.trim().toUpperCase().replace(/\s+/g, "");
     }
 
@@ -439,6 +637,17 @@
       try {
         await navigator.clipboard.writeText(text);
         alert("BDM summary copied.");
+      } catch (error) {
+        alert("Could not copy summary. Your browser may block clipboard access.");
+      }
+    }
+
+    async function copyPartSearchSummary(partNumber) {
+      const text = `TPS Parts Intelligence Hub\n\nVW Group part number: ${partNumber}\n\nSuggested supplier checks:\n- Bosch\n- MAHLE\n- SKF\n- ZF / TRW / Sachs / Lemförder\n- Valeo\n- NGK / NTK\n- Hella\n\nNote: Supplier catalogues remain the source of truth. Verify fitment before quoting.`;
+
+      try {
+        await navigator.clipboard.writeText(text);
+        alert("Search summary copied.");
       } catch (error) {
         alert("Could not copy summary. Your browser may block clipboard access.");
       }

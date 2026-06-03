@@ -13,6 +13,10 @@ app.use(express.static(__dirname));
 let cachedToken = null;
 let tokenExpiresAt = 0;
 
+function cleanValue(value) {
+  return String(value || "").trim();
+}
+
 function cleanRegistration(registration) {
   return String(registration || "")
     .toUpperCase()
@@ -20,14 +24,17 @@ function cleanRegistration(registration) {
     .replace(/[^A-Z0-9]/g, "");
 }
 
+function cleanPartNumber(partNumber) {
+  return String(partNumber || "")
+    .toUpperCase()
+    .replace(/\s+/g, "")
+    .replace(/[^A-Z0-9]/g, "");
+}
+
 function formatDate(value) {
   if (!value) return "Unknown";
-
   const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
+  if (Number.isNaN(date.getTime())) return value;
 
   return date.toLocaleDateString("en-GB", {
     day: "2-digit",
@@ -41,22 +48,17 @@ async function readJsonResponse(response, label) {
 
   try {
     return JSON.parse(rawText);
-  } catch (error) {
+  } catch {
     console.error(`\n${label} returned non-JSON:`);
     console.error(rawText.slice(0, 1000));
-
-    throw new Error(
-      `${label} returned HTML/text instead of JSON. Check the URL, credentials and API setup.`
-    );
+    throw new Error(`${label} returned HTML/text instead of JSON.`);
   }
 }
 
 async function getAccessToken() {
   const now = Date.now();
 
-  if (cachedToken && now < tokenExpiresAt) {
-    return cachedToken;
-  }
+  if (cachedToken && now < tokenExpiresAt) return cachedToken;
 
   const tokenUrl = process.env.DVSA_TOKEN_URL;
   const clientId = process.env.DVSA_CLIENT_ID;
@@ -64,9 +66,7 @@ async function getAccessToken() {
   const scope = process.env.DVSA_SCOPE;
 
   if (!tokenUrl || !clientId || !clientSecret || !scope) {
-    throw new Error(
-      "Missing DVSA OAuth details in .env. Check DVSA_TOKEN_URL, DVSA_CLIENT_ID, DVSA_CLIENT_SECRET and DVSA_SCOPE."
-    );
+    throw new Error("Missing DVSA OAuth details in environment variables.");
   }
 
   const body = new URLSearchParams();
@@ -74,8 +74,6 @@ async function getAccessToken() {
   body.append("client_id", clientId);
   body.append("client_secret", clientSecret);
   body.append("scope", scope);
-
-  console.log("\nRequesting DVSA access token...");
 
   const response = await fetch(tokenUrl, {
     method: "POST",
@@ -89,27 +87,15 @@ async function getAccessToken() {
   const data = await readJsonResponse(response, "DVSA token endpoint");
 
   if (!response.ok) {
-    console.error("\nDVSA token error:");
-    console.error(data);
-
     throw new Error(
       data?.error_description ||
         data?.error ||
-        "Could not get DVSA access token. Check token URL, client ID, secret and scope."
+        "Could not get DVSA access token."
     );
-  }
-
-  if (!data.access_token) {
-    console.error("\nDVSA token response did not contain access_token:");
-    console.error(data);
-
-    throw new Error("DVSA token response did not contain an access token.");
   }
 
   cachedToken = data.access_token;
   tokenExpiresAt = Date.now() + ((data.expires_in || 3600) - 60) * 1000;
-
-  console.log("DVSA access token received.");
 
   return cachedToken;
 }
@@ -144,7 +130,6 @@ function normaliseVehicleData(vehicle) {
   const advisories = defects
     .filter((defect) => {
       const type = String(defect.type || "").toLowerCase();
-
       return type.includes("advisory") || type.includes("minor");
     })
     .map((defect) => defect.text)
@@ -197,17 +182,13 @@ app.get("/api/mot/:registration", async (req, res) => {
     const registration = cleanRegistration(req.params.registration);
 
     if (!registration) {
-      return res.status(400).json({
-        error: "Registration is required."
-      });
+      return res.status(400).json({ error: "Registration is required." });
     }
 
     const apiKey = process.env.DVSA_API_KEY;
 
     if (!apiKey) {
-      return res.status(500).json({
-        error: "Missing DVSA_API_KEY in .env file."
-      });
+      return res.status(500).json({ error: "Missing DVSA_API_KEY." });
     }
 
     const accessToken = await getAccessToken();
@@ -215,9 +196,6 @@ app.get("/api/mot/:registration", async (req, res) => {
     const url = `https://history.mot.api.gov.uk/v1/trade/vehicles/registration/${encodeURIComponent(
       registration
     )}`;
-
-    console.log(`\nLooking up MOT history for: ${registration}`);
-    console.log(`DVSA URL: ${url}`);
 
     const response = await fetch(url, {
       method: "GET",
@@ -231,29 +209,108 @@ app.get("/api/mot/:registration", async (req, res) => {
     const data = await readJsonResponse(response, "DVSA MOT endpoint");
 
     if (!response.ok) {
-      console.error("\nDVSA MOT lookup error:");
-      console.error(data);
-
       return res.status(response.status).json({
         error: data?.message || data?.error || "DVSA lookup failed.",
         detail: data
       });
     }
 
-    const vehicle = normaliseVehicleData(data);
-
-    res.json(vehicle);
+    res.json(normaliseVehicleData(data));
   } catch (error) {
-    console.error("\nServer error:");
     console.error(error);
+    res.status(500).json({ error: error.message || "Something went wrong." });
+  }
+});
 
-    res.status(500).json({
-      error: error.message || "Something went wrong."
+app.get("/api/xref/:vwPartNumber", async (req, res) => {
+  try {
+    const webAppUrl = process.env.XREF_SHEET_WEBAPP_URL;
+    const secret = process.env.XREF_SHEET_SECRET;
+    const vwPartNumber = cleanPartNumber(req.params.vwPartNumber);
+
+    if (!webAppUrl || !secret) {
+      return res.status(500).json({
+        error: "Missing Google Sheet x-ref environment variables."
+      });
+    }
+
+    if (!vwPartNumber) {
+      return res.status(400).json({ error: "VW part number is required." });
+    }
+
+    const url = `${webAppUrl}?secret=${encodeURIComponent(
+      secret
+    )}&vwPartNumber=${encodeURIComponent(vwPartNumber)}`;
+
+    const response = await fetch(url);
+    const data = await readJsonResponse(response, "Google Sheet x-ref lookup");
+
+    if (!data.success) {
+      return res.status(500).json({
+        error: data.error || "Google Sheet lookup failed."
+      });
+    }
+
+    res.json({
+      success: true,
+      matches: data.matches || []
     });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: error.message || "X-ref lookup failed." });
+  }
+});
+
+app.post("/api/xref", async (req, res) => {
+  try {
+    const webAppUrl = process.env.XREF_SHEET_WEBAPP_URL;
+    const secret = process.env.XREF_SHEET_SECRET;
+
+    if (!webAppUrl || !secret) {
+      return res.status(500).json({
+        error: "Missing Google Sheet x-ref environment variables."
+      });
+    }
+
+    const payload = {
+      secret,
+      vwPartNumber: cleanPartNumber(req.body.vwPartNumber),
+      supplier: cleanValue(req.body.supplier),
+      aftermarketPartNumber: cleanValue(req.body.aftermarketPartNumber).toUpperCase(),
+      category: cleanValue(req.body.category),
+      submittedBy: cleanValue(req.body.submittedBy),
+      notes: cleanValue(req.body.notes)
+    };
+
+    if (!payload.vwPartNumber || !payload.supplier || !payload.aftermarketPartNumber) {
+      return res.status(400).json({
+        error: "VW part number, supplier and aftermarket part number are required."
+      });
+    }
+
+    const response = await fetch(webAppUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "text/plain;charset=utf-8"
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await readJsonResponse(response, "Google Sheet x-ref save");
+
+    if (!data.success) {
+      return res.status(500).json({
+        error: data.error || "Could not save match."
+      });
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: error.message || "Could not save match." });
   }
 });
 
 app.listen(PORT, () => {
-  console.log(`\nMOT Quote Assist running at http://localhost:${PORT}`);
-  console.log(`Health check: http://localhost:${PORT}/api/health`);
+  console.log(`MOT Quote Assist running on port ${PORT}`);
 });
