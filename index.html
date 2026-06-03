@@ -93,23 +93,35 @@
       gap: 10px;
     }
 
-    input {
-      flex: 1;
+    input, select, textarea {
+      width: 100%;
       border: 2px solid #d6e1e8;
       border-radius: 16px;
-      padding: 16px;
+      padding: 14px;
+      font-size: 15px;
+      font-weight: 700;
+      outline: none;
+      background: #fbfdfe;
+      font-family: inherit;
+    }
+
+    input.main-input {
+      flex: 1;
       font-size: 22px;
       font-weight: 800;
       text-transform: uppercase;
       letter-spacing: 0.06em;
-      outline: none;
-      background: #fbfdfe;
       min-width: 0;
     }
 
-    input:focus {
+    input:focus, select:focus, textarea:focus {
       border-color: #36a9b8;
       box-shadow: 0 0 0 4px rgba(54, 169, 184, 0.13);
+    }
+
+    textarea {
+      min-height: 80px;
+      resize: vertical;
     }
 
     button, .supplier-link {
@@ -170,20 +182,9 @@
       text-transform: uppercase;
     }
 
-    .failed {
-      background: #ffe4e4;
-      color: #9c1111;
-    }
-
-    .passed {
-      background: #e1f7ea;
-      color: #106b35;
-    }
-
-    .unknown {
-      background: #e9eef2;
-      color: #344654;
-    }
+    .failed { background: #ffe4e4; color: #9c1111; }
+    .passed { background: #e1f7ea; color: #106b35; }
+    .unknown { background: #e9eef2; color: #344654; }
 
     .meta-grid {
       display: grid;
@@ -264,12 +265,13 @@
       border-color: #102030;
     }
 
-    .empty, .error {
+    .empty, .error, .success {
       color: #6e7d88;
       font-size: 14px;
       background: #f5f8fa;
       padding: 12px;
       border-radius: 14px;
+      line-height: 1.45;
     }
 
     .error {
@@ -278,6 +280,36 @@
       border: 1px solid #ffc6c6;
     }
 
+    .success {
+      background: #e1f7ea;
+      color: #106b35;
+      border: 1px solid #b7ebc9;
+    }
+
+    .match-card {
+      background: #eaf7f8;
+      border: 1px solid #ccebf0;
+      border-radius: 14px;
+      padding: 12px;
+      font-size: 14px;
+      line-height: 1.45;
+    }
+
+    .match-card strong {
+      display: block;
+      font-size: 16px;
+      color: #0b6070;
+      margin-bottom: 4px;
+    }
+
+    .form-grid {
+      display: grid;
+      gap: 12px;
+    }
+
+    .tool-screen { display: none; }
+    .tool-screen.active { display: block; }
+
     .footer-note {
       color: #72808c;
       font-size: 12px;
@@ -285,21 +317,10 @@
       margin-top: 18px;
     }
 
-    .tool-screen { display: none; }
-    .tool-screen.active { display: block; }
-
     @media (max-width: 420px) {
-      .input-row {
-        flex-direction: column;
-      }
-
-      .parts-grid, .supplier-grid {
-        grid-template-columns: 1fr;
-      }
-
-      button {
-        width: 100%;
-      }
+      .input-row { flex-direction: column; }
+      .parts-grid, .supplier-grid { grid-template-columns: 1fr; }
+      button { width: 100%; }
     }
   </style>
 </head>
@@ -320,7 +341,7 @@
       <section class="card">
         <label for="regInput">Vehicle registration</label>
         <div class="input-row">
-          <input id="regInput" type="text" placeholder="AB12 CDE" maxlength="10" />
+          <input id="regInput" class="main-input" type="text" placeholder="AB12 CDE" maxlength="10" />
           <button id="checkBtn">Check</button>
         </div>
         <div class="hint">Live DVSA mode. First lookup may be slower if Render has been asleep.</div>
@@ -334,18 +355,22 @@
       <section class="card">
         <label for="partInput">VW Group part number</label>
         <div class="input-row">
-          <input id="partInput" type="text" placeholder="5Q0411315K" />
+          <input id="partInput" class="main-input" type="text" placeholder="5Q0411315K" />
           <button id="partSearchBtn">Search</button>
         </div>
-        <div class="hint">This does not guarantee fitment. Supplier catalogues remain the source of truth.</div>
+        <div class="hint">Search known matches, predict rough category, and launch supplier catalogues.</div>
       </section>
 
+      <section id="xrefStatus" class="card hidden"></section>
       <section id="xrefResults" class="card hidden"></section>
     </section>
   </main>
 
   <script>
     const API_BASE = "https://mot-quote-assist-api.onrender.com";
+
+    let currentPartNumber = "";
+    let currentPredictedCategory = "";
 
     const partRules = [
       { keywords: ["brake pad", "pad worn"], part: "Brake pads" },
@@ -364,42 +389,24 @@
       { keywords: ["mirror"], part: "Mirror / glass" }
     ];
 
-    const suppliers = [
-      {
-        name: "Bosch",
-        url: "https://www.boschaftermarket.com/gb/en/parts/product-search.html",
-        note: "Use product search. Bosch supports OE/competitor number searching."
-      },
-      {
-        name: "MAHLE",
-        url: "https://www.mahle-aftermarket.com/eu/en/catalog/",
-        note: "Open MAHLE online catalogue and search the OE number."
-      },
-      {
-        name: "SKF",
-        url: "https://automotive.skf.com/eur/en/product-catalogue",
-        note: "Use product catalogue search."
-      },
-      {
-        name: "ZF / TRW / Sachs / Lemförder",
-        url: "https://aftermarket.zf.com/en/catalog",
-        note: "Use ZF online catalogue product search."
-      },
-      {
-        name: "Valeo",
-        url: "https://www.valeoservice.com/en-com/catalogue",
-        note: "Open Valeo catalogue and search the OE number."
-      },
-      {
-        name: "NGK / NTK",
-        url: "https://www.ngkpartfinder.co.uk/",
-        note: "Use NGK part finder."
-      },
-      {
-        name: "Hella",
-        url: "https://www.hella.com/techworld/uk/Technical/Parts-catalogue/",
-        note: "Open Hella catalogue and search the OE number."
-      }
+    const supplierData = [
+      { name: "Bosch", categories: ["Ignition", "Filters", "Braking", "Wipers", "Lighting"], url: "https://www.boschaftermarket.com/gb/en/parts/product-search.html" },
+      { name: "MAHLE", categories: ["Filters", "Engine", "Thermal"], url: "https://www.mahle-aftermarket.com/eu/en/catalog/" },
+      { name: "SKF", categories: ["Wheel Bearing", "Suspension", "Timing"], url: "https://automotive.skf.com/eur/en/product-catalogue" },
+      { name: "ZF / TRW / Sachs / Lemförder", categories: ["Braking", "Suspension", "Clutch", "Steering"], url: "https://aftermarket.zf.com/en/catalog" },
+      { name: "Valeo", categories: ["Wipers", "Clutch", "Lighting", "Thermal", "Electrical"], url: "https://www.valeoservice.com/en-com/catalogue" },
+      { name: "NGK / NTK", categories: ["Ignition", "Sensors"], url: "https://www.ngkpartfinder.co.uk/" },
+      { name: "Hella", categories: ["Lighting", "Electrical", "Braking"], url: "https://www.hella.com/techworld/uk/Technical/Parts-catalogue/" }
+    ];
+
+    const categoryRules = [
+      { category: "Ignition", label: "Likely ignition / spark plug related", prefixes: ["03C905", "06H905", "04E905", "03F905"], suppliers: ["NGK / NTK", "Bosch"] },
+      { category: "Filters", label: "Likely filter related", prefixes: ["03L115", "04L115", "059115", "1K0129", "5Q0129"], suppliers: ["MAHLE", "Bosch"] },
+      { category: "Braking", label: "Likely braking related", prefixes: ["1K0615", "5Q0615", "8V0615", "2Q0615"], suppliers: ["Bosch", "ZF / TRW / Sachs / Lemförder", "Hella"] },
+      { category: "Suspension", label: "Likely suspension / steering related", prefixes: ["1K0411", "5Q0411", "1K0407", "5Q0407", "6R0407"], suppliers: ["ZF / TRW / Sachs / Lemförder", "SKF"] },
+      { category: "Wheel Bearing", label: "Likely wheel bearing / hub related", prefixes: ["1T0498", "5Q0498", "8V0498"], suppliers: ["SKF", "ZF / TRW / Sachs / Lemförder"] },
+      { category: "Wipers", label: "Likely wiper blade related", prefixes: ["5G1955", "2G1955", "6R1955"], suppliers: ["Bosch", "Valeo"] },
+      { category: "Lighting", label: "Likely lighting related", prefixes: ["5G0941", "5Q0941", "2K0941", "8V0941"], suppliers: ["Hella", "Valeo", "Bosch"] }
     ];
 
     const motTab = document.getElementById("motTab");
@@ -414,29 +421,246 @@
 
     const partInput = document.getElementById("partInput");
     const partSearchBtn = document.getElementById("partSearchBtn");
+    const xrefStatus = document.getElementById("xrefStatus");
     const xrefResults = document.getElementById("xrefResults");
 
     motTab.addEventListener("click", () => switchTab("mot"));
     xrefTab.addEventListener("click", () => switchTab("xref"));
-
     checkBtn.addEventListener("click", handleCheck);
+    partSearchBtn.addEventListener("click", handlePartSearch);
+
     regInput.addEventListener("keydown", (event) => {
       if (event.key === "Enter") handleCheck();
     });
 
-    partSearchBtn.addEventListener("click", handlePartSearch);
     partInput.addEventListener("keydown", (event) => {
       if (event.key === "Enter") handlePartSearch();
     });
 
     function switchTab(tabName) {
       const isMot = tabName === "mot";
-
       motTab.classList.toggle("active", isMot);
       xrefTab.classList.toggle("active", !isMot);
-
       motScreen.classList.toggle("active", isMot);
       xrefScreen.classList.toggle("active", !isMot);
+    }
+
+    async function handlePartSearch() {
+      const partNumber = cleanPartNumber(partInput.value);
+
+      if (!partNumber) {
+        alert("Enter a VW Group part number first.");
+        return;
+      }
+
+      currentPartNumber = partNumber;
+      const prediction = predictCategory(partNumber);
+      currentPredictedCategory = prediction.category;
+
+      xrefStatus.innerHTML = `<div class="empty">Checking saved cross references...</div>`;
+      xrefStatus.classList.remove("hidden");
+      xrefResults.classList.add("hidden");
+
+      try {
+        const response = await fetch(`${API_BASE}/api/xref/${encodeURIComponent(partNumber)}`);
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || "Could not check saved matches.");
+        }
+
+        renderXrefResults(partNumber, prediction, data.matches || []);
+        xrefStatus.classList.add("hidden");
+      } catch (error) {
+        renderXrefResults(partNumber, prediction, []);
+        xrefStatus.innerHTML = `<div class="error">${escapeHtml(error.message)}</div>`;
+        xrefStatus.classList.remove("hidden");
+      }
+    }
+
+    function renderXrefResults(partNumber, prediction, matches) {
+      const recommendedSuppliers = supplierData.filter(s => prediction.suppliers.includes(s.name));
+      const otherSuppliers = supplierData.filter(s => !prediction.suppliers.includes(s.name));
+      const googleSearchUrl = `https://www.google.com/search?q=${encodeURIComponent(partNumber)}+aftermarket+cross+reference`;
+
+      xrefResults.innerHTML = `
+        <div class="vehicle-title">
+          <div>
+            <h2>Aftermarket X-Ref</h2>
+            <div class="hint">VW Group part number: <strong>${escapeHtml(partNumber)}</strong></div>
+          </div>
+          <div class="result-pill unknown">${escapeHtml(prediction.category)}</div>
+        </div>
+
+        <div class="section-title">Part intelligence</div>
+        <div class="empty">
+          <strong>${escapeHtml(prediction.label)}</strong><br>
+          This is a rough prediction only. The supplier catalogue remains the source of truth.
+        </div>
+
+        <div class="section-title">Known saved matches</div>
+        ${renderKnownMatches(matches)}
+
+        <div class="section-title">Recommended supplier searches</div>
+        ${renderSupplierLinks(recommendedSuppliers, partNumber, true)}
+
+        <div class="section-title">Other supplier searches</div>
+        <div class="supplier-grid">
+          <a class="supplier-link primary" href="${googleSearchUrl}" target="_blank" rel="noopener noreferrer">Google X-Ref Search</a>
+          ${renderSupplierLinks(otherSuppliers, partNumber, false, true)}
+        </div>
+
+        <div class="section-title">Save a confirmed match</div>
+        ${renderSaveMatchForm(partNumber, prediction.category)}
+
+        <p class="footer-note">Only save matches you have verified from a supplier catalogue. This creates the internal knowledge base over time.</p>
+      `;
+
+      xrefResults.classList.remove("hidden");
+    }
+
+    function renderKnownMatches(matches) {
+      if (!matches.length) {
+        return `<div class="empty">No saved matches found yet. Search supplier catalogues and save any verified match.</div>`;
+      }
+
+      return `
+        <div class="issue-list">
+          ${matches.map(match => `
+            <div class="match-card">
+              <strong>${escapeHtml(match.supplier)} — ${escapeHtml(match.aftermarketPartNumber)}</strong>
+              VW: ${escapeHtml(match.vwPartNumber)}<br>
+              Category: ${escapeHtml(match.category || "Not set")}<br>
+              Submitted by: ${escapeHtml(match.submittedBy || "Unknown")}<br>
+              ${match.notes ? `Notes: ${escapeHtml(match.notes)}` : ""}
+            </div>
+          `).join("")}
+        </div>
+      `;
+    }
+
+    function renderSupplierLinks(suppliers, partNumber, primary = false, innerOnly = false) {
+      const links = suppliers.map(supplier => `
+        <a class="supplier-link ${primary ? "primary" : ""}" href="${supplier.url}" target="_blank" rel="noopener noreferrer">
+          ${escapeHtml(supplier.name)}
+        </a>
+      `).join("");
+
+      if (innerOnly) return links;
+
+      return `<div class="supplier-grid">${links}</div>`;
+    }
+
+    function renderSaveMatchForm(partNumber, category) {
+      const supplierOptions = supplierData.map(supplier => `
+        <option value="${escapeHtml(supplier.name)}">${escapeHtml(supplier.name)}</option>
+      `).join("");
+
+      return `
+        <div class="form-grid">
+          <div>
+            <label>VW part number</label>
+            <input id="saveVwPart" value="${escapeHtml(partNumber)}" readonly />
+          </div>
+
+          <div>
+            <label>Supplier</label>
+            <select id="saveSupplier">
+              <option value="">Select supplier</option>
+              ${supplierOptions}
+            </select>
+          </div>
+
+          <div>
+            <label>Aftermarket part number</label>
+            <input id="saveAftermarketPart" placeholder="e.g. OX388D" />
+          </div>
+
+          <div>
+            <label>Category</label>
+            <input id="saveCategory" value="${escapeHtml(category)}" />
+          </div>
+
+          <div>
+            <label>Submitted by</label>
+            <input id="saveSubmittedBy" placeholder="e.g. Chris" />
+          </div>
+
+          <div>
+            <label>Notes</label>
+            <textarea id="saveNotes" placeholder="e.g. Confirmed in MAHLE catalogue"></textarea>
+          </div>
+
+          <button onclick="saveXrefMatch()">Save Match</button>
+          <button class="secondary" onclick='copyPartNumber(${JSON.stringify(partNumber)})'>Copy VW Part Number</button>
+        </div>
+      `;
+    }
+
+    async function saveXrefMatch() {
+      const payload = {
+        vwPartNumber: document.getElementById("saveVwPart").value,
+        supplier: document.getElementById("saveSupplier").value,
+        aftermarketPartNumber: document.getElementById("saveAftermarketPart").value,
+        category: document.getElementById("saveCategory").value,
+        submittedBy: document.getElementById("saveSubmittedBy").value,
+        notes: document.getElementById("saveNotes").value
+      };
+
+      if (!payload.vwPartNumber || !payload.supplier || !payload.aftermarketPartNumber) {
+        alert("VW part number, supplier and aftermarket part number are required.");
+        return;
+      }
+
+      try {
+        xrefStatus.innerHTML = `<div class="empty">Saving match to database...</div>`;
+        xrefStatus.classList.remove("hidden");
+
+        const response = await fetch(`${API_BASE}/api/xref`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || "Could not save match.");
+        }
+
+        xrefStatus.innerHTML = `<div class="success">Match saved to Google Sheet database.</div>`;
+        xrefStatus.classList.remove("hidden");
+
+        await handlePartSearch();
+      } catch (error) {
+        xrefStatus.innerHTML = `<div class="error">${escapeHtml(error.message)}</div>`;
+        xrefStatus.classList.remove("hidden");
+      }
+    }
+
+    function predictCategory(partNumber) {
+      const clean = cleanPartNumber(partNumber);
+
+      const matchedRule = categoryRules.find(rule => {
+        return rule.prefixes.some(prefix => clean.startsWith(prefix));
+      });
+
+      if (matchedRule) return matchedRule;
+
+      return {
+        category: "Unknown",
+        label: "Unknown part type",
+        suppliers: supplierData.map(s => s.name)
+      };
+    }
+
+    async function copyPartNumber(partNumber) {
+      try {
+        await navigator.clipboard.writeText(partNumber);
+        alert("VW part number copied.");
+      } catch {
+        alert("Could not copy part number.");
+      }
     }
 
     async function handleCheck() {
@@ -458,7 +682,7 @@
         try {
           data = JSON.parse(rawText);
         } catch {
-          throw new Error("The backend returned HTML instead of JSON. Check the Render backend URL and /api/health.");
+          throw new Error("The backend returned HTML instead of JSON. Check Render /api/health.");
         }
 
         if (!response.ok) {
@@ -473,61 +697,6 @@
       } finally {
         setLoading(false);
       }
-    }
-
-    function handlePartSearch() {
-      const partNumber = cleanPartNumber(partInput.value);
-
-      if (!partNumber) {
-        alert("Enter a VW Group part number first.");
-        return;
-      }
-
-      renderSupplierLauncher(partNumber);
-    }
-
-    function renderSupplierLauncher(partNumber) {
-      const encodedPart = encodeURIComponent(partNumber);
-      const googleSearchUrl = `https://www.google.com/search?q=${encodedPart}+aftermarket+cross+reference`;
-
-      xrefResults.innerHTML = `
-        <div class="vehicle-title">
-          <div>
-            <h2>Aftermarket X-Ref</h2>
-            <div class="hint">VW Group part number: <strong>${escapeHtml(partNumber)}</strong></div>
-          </div>
-          <div class="result-pill unknown">Search</div>
-        </div>
-
-        <div class="section-title">Supplier catalogue launchers</div>
-
-        <div class="supplier-grid">
-          <a class="supplier-link primary" href="${googleSearchUrl}" target="_blank" rel="noopener noreferrer">Google X-Ref Search</a>
-          ${suppliers.map((supplier) => `
-            <a class="supplier-link" href="${supplier.url}" target="_blank" rel="noopener noreferrer">
-              ${escapeHtml(supplier.name)}
-            </a>
-          `).join("")}
-        </div>
-
-        <div class="section-title">How to use</div>
-        <div class="empty">
-          Open a supplier catalogue, paste <strong>${escapeHtml(partNumber)}</strong> into their product/OE search, then verify the result directly with the supplier catalogue.
-        </div>
-
-        <div class="section-title">Supplier notes</div>
-        <ul class="issue-list">
-          ${suppliers.map((supplier) => `
-            <li class="issue advisory"><strong>${escapeHtml(supplier.name)}:</strong> ${escapeHtml(supplier.note)}</li>
-          `).join("")}
-        </ul>
-
-        <button class="secondary" onclick='copyPartSearchSummary(${JSON.stringify(partNumber)})'>Copy search summary</button>
-
-        <p class="footer-note">This is a search launcher only. It does not confirm fitment, stock, price or availability.</p>
-      `;
-
-      xrefResults.classList.remove("hidden");
     }
 
     function setLoading(isLoading) {
@@ -637,19 +806,8 @@
       try {
         await navigator.clipboard.writeText(text);
         alert("BDM summary copied.");
-      } catch (error) {
-        alert("Could not copy summary. Your browser may block clipboard access.");
-      }
-    }
-
-    async function copyPartSearchSummary(partNumber) {
-      const text = `TPS Parts Intelligence Hub\n\nVW Group part number: ${partNumber}\n\nSuggested supplier checks:\n- Bosch\n- MAHLE\n- SKF\n- ZF / TRW / Sachs / Lemförder\n- Valeo\n- NGK / NTK\n- Hella\n\nNote: Supplier catalogues remain the source of truth. Verify fitment before quoting.`;
-
-      try {
-        await navigator.clipboard.writeText(text);
-        alert("Search summary copied.");
-      } catch (error) {
-        alert("Could not copy summary. Your browser may block clipboard access.");
+      } catch {
+        alert("Could not copy summary.");
       }
     }
 
